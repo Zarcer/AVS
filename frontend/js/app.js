@@ -63,6 +63,11 @@ const app = createApp({
             }
         };
 
+        const confirmPowerOff = () => {
+            if (confirm('Устройство будет переведено в режим пониженного энергопотребления. Продолжить?')) {
+                sendDeviceCommand('power_off');
+            }
+        };
         // Вход администратора
         const loginAdmin = async () => {
             try {
@@ -617,6 +622,7 @@ const app = createApp({
             openDeviceControl,
             closeDeviceControl,
             sendDeviceCommand,
+            confirmPowerOff,
         };
     }
 });

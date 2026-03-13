@@ -1458,3 +1458,15 @@ body {
 .device-control-btn:hover {
     background: #7c3aed;
 }
+.command-btn.power-on {
+    background: #10b981;
+}
+.command-btn.power-on:hover {
+    background: #059669;
+}
+.command-btn.power-off {
+    background: #ef4444;
+}
+.command-btn.power-off:hover {
+    background: #dc2626;
+}

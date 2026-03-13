@@ -448,6 +448,14 @@
                                     :disabled="commandLoading" class="command-btn">
                                 <i class="fas fa-exclamation-triangle"></i> Выкл. детекцию падения
                             </button>
+                            <button @click="sendDeviceCommand('power_on')" 
+                                    :disabled="commandLoading" class="command-btn power-on">
+                                <i class="fas fa-play"></i> Включить
+                            </button>
+                            <button @click="confirmPowerOff()" 
+                                    :disabled="commandLoading" class="command-btn power-off">
+                                <i class="fas fa-stop"></i> Выключить
+                            </button>
                             <!-- Для команд с параметрами можно добавить поля ввода -->
                         </div>
 

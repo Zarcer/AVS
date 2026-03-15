@@ -19,7 +19,7 @@ type Config struct {
 func Load() *Config {
     _ = godotenv.Load()
     return &Config{
-        HTTPPort:     getEnvAsInt("HTTP_PORT", 8080),
+        HTTPPort:     getEnvAsInt("HTTP_PORT", 8083),
         MQTTBroker:   getEnv("MQTT_BROKER", "tcp://localhost:1883"),
         MQTTUsername: getEnv("MQTT_USERNAME", ""),
         MQTTPassword: getEnv("MQTT_PASSWORD", ""),

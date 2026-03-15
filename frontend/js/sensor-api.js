@@ -243,7 +243,6 @@ class SensorAPIService {
         }
     }
 
-
     async sendDeviceCommand(deviceId, command, parameters = {}) {
         try {
             if (this.useDemoMode) {
@@ -256,7 +255,8 @@ class SensorAPIService {
                 };
             }
 
-            const url = `${this.baseUrl}/devices/${deviceId}/command`;
+            // Единый эндпоинт для всех команд
+            const url = `${this.baseUrl}/admin/commands`;
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -264,7 +264,11 @@ class SensorAPIService {
                     'Accept': 'application/json',
                     ...(this.token && { 'Authorization': `Bearer ${this.token}` })
                 },
-                body: JSON.stringify({ command, parameters })
+                body: JSON.stringify({ 
+                    device_id: deviceId,   
+                    command, 
+                    parameters 
+                })
             });
 
             if (!response.ok) throw new Error(`Ошибка сервера: ${response.status}`);

@@ -318,12 +318,12 @@
                             <div v-else-if="roomHistory.length > 0" class="charts-container">
                                 <div class="chart-wrapper">
                                     <h4>Изменение показателей во времени</h4>
-                                    <line-chart :data="roomHistory" :title="`${selectedRoom.name} - Исторические данные`" />
+                                    <line-chart :key="roomHistory.length" :data="roomHistory" :title="`${selectedRoom.name} - Исторические данные`" />
                                 </div>
 
                                 <div class="chart-wrapper">
                                     <h4>Качество воздуха</h4>
-                                    <quality-chart :data="roomHistory" />
+                                    <quality-chart :key="roomHistory.length" :data="roomHistory" />
                                 </div>
                             </div>
                             <div v-else class="no-charts-data">
@@ -431,6 +431,12 @@
                             <button @click="sendDeviceCommand('get_battery')" 
                                     :disabled="commandLoading" class="command-btn">
                                 <i class="fas fa-battery-three-quarters"></i> Статус батареи
+                            </button>
+                            <button @click="sendOTAUpdate" :disabled="commandLoading" class="command-btn ota-update">
+                                <i class="fas fa-cloud-upload-alt"></i> OTA Update
+                            </button>
+                            <button @click="sendDeviceCommand('ota_rollback')" :disabled="commandLoading" class="command-btn ota-rollback">
+                                <i class="fas fa-undo-alt"></i> OTA Rollback
                             </button>
                             <button @click="sendDeviceCommand('get_version')" 
                                     :disabled="commandLoading" class="command-btn">

@@ -21,8 +21,8 @@ services:
     environment:
       HTTP_PORT: 8083
       MQTT_BROKER: tcp://mqtt:1883
-      MQTT_USERNAME: ""
-      MQTT_PASSWORD: ""
+      MQTT_USERNAME: "avs"
+      MQTT_PASSWORD: "avs"
       LOG_LEVEL: info
     restart: unless-stopped
 
@@ -30,8 +30,8 @@ services:
     build: ./ingest-go
     environment:
       MQTT_BROKER: tcp://mqtt:1883
-      MQTT_USERNAME: ""
-      MQTT_PASSWORD: ""
+      MQTT_USERNAME: "avs"
+      MQTT_PASSWORD: "avs"
       POSTGRES_URL: postgres://avs:avs_pass@postgres:5432/avsdb?sslmode=disable
       REDIS_URL: ""
       LOG_LEVEL: info

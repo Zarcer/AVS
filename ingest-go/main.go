@@ -34,6 +34,10 @@ func main() {
     
     // Настраиваем MQTT клиент
     mqttOpts := mqtt.NewClientOptions(cfg.MQTTBroker, "avs-ingest")
+    if cfg.MQTTUsername != "" {
+        mqttOpts.SetUsername(cfg.MQTTUsername)
+        mqttOpts.SetPassword(cfg.MQTTPassword)
+    }
     client := mqtt.NewClient(mqttOpts, handler)
     
     if err := client.Connect(); err != nil {

@@ -22,10 +22,19 @@ type Config struct {
 }
 
 func Load() *Config {
+    mqttUser := getEnv("MQTT_USERNAME")
+    if mqttUser == "" {
+        mqttUser = getEnv("MQTT_USER")
+    }
+    mqttPass := getEnv("MQTT_PASSWORD")
+    if mqttPass == "" {
+        mqttPass = getEnv("MQTT_PASS")
+    }
+
     return &Config{
         MQTTBroker:   getRequiredEnv("MQTT_BROKER"),
-        MQTTUsername: getEnv("MQTT_USERNAME"),
-        MQTTPassword: getEnv("MQTT_PASSWORD"),
+        MQTTUsername: mqttUser,
+        MQTTPassword: mqttPass,
         PostgresURL:  getRequiredEnv("POSTGRES_URL"),
         RedisURL:     getEnv("REDIS_URL"),
         LogLevel:     getRequiredEnv("LOG_LEVEL"),

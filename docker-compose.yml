@@ -81,6 +81,8 @@ services:
       - 9234:9234
     environment:
       - MQTT_ENDPOINT=tcp://mqtt:1883
+      - MQTT_USER=avs
+      - MQTT_PASS=avs
     restart: unless-stopped
 
   grafana:

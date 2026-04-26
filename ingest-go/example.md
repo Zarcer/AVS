@@ -1,7 +1,6 @@
 ## Отправка в топик
 
-mosquitto_pub -h nsu-metrics.ru -u "avs" -P "avs" --capath /etc/ssl/certs/ -t "sensors/room123/d
-ata" -m '{
+mosquitto_pub -h nsu-metrics.ru -u "avs" -P "avs" --capath /etc/ssl/certs/ -t "sensors/room123/data" -m '{
     "sensorId": "sensor_75",
     "buildingName": "Main",
     "roomNumber": "123",

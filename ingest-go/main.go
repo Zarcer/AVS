@@ -1,6 +1,7 @@
 package main
 
 import (
+    "encoding/json"
     "log"
     "os"
     "os/signal"
@@ -28,9 +29,56 @@ func main() {
     defer db.Close()
     
     log.Println("PostgreSQL connection established")
+
+    // Инициализируем Redis (опционально)
+    var redisClient *storage.RedisClient
+    if cfg.RedisURL != "" {
+        redisClient = storage.NewRedisClient(cfg.RedisURL)
+        defer redisClient.Close()
+
+        // Backfill Redis "current state" from PostgreSQL on startup
+        current, err := db.GetCurrentState()
+        if err != nil {
+            log.Printf("Redis backfill skipped (failed to read current state from PostgreSQL): %v", err)
+        } else {
+            type redisRecord struct {
+                ID           uint      `json:"id"`
+                SensorID     string    `json:"sensorId"`
+                BuildingName string    `json:"buildingName"`
+                RoomNumber   string    `json:"roomNumber"`
+                TS           time.Time `json:"ts"`
+                CO2          int       `json:"co2"`
+                Temperature  int       `json:"temperature"`
+                Humidity     int       `json:"humidity"`
+            }
+
+            ok := 0
+            for _, row := range current {
+                rec := redisRecord{
+                    ID:           row.ID,
+                    SensorID:     row.SensorID,
+                    BuildingName: row.BuildingName,
+                    RoomNumber:   row.RoomNumber,
+                    TS:           row.TS,
+                    CO2:          row.CO2,
+                    Temperature:  row.Temperature,
+                    Humidity:     row.Humidity,
+                }
+                b, err := json.Marshal(rec)
+                if err != nil {
+                    continue
+                }
+                if err := redisClient.SetCurrentSensorRecord(row.SensorID, b); err != nil {
+                    continue
+                }
+                ok++
+            }
+            log.Printf("Redis backfill complete: %d sensor current records", ok)
+        }
+    }
     
     // Инициализируем MQTT обработчик
-    handler := mqtt.NewHandler(db)
+    handler := mqtt.NewHandler(db, redisClient)
     
     // Настраиваем MQTT клиент
     mqttOpts := mqtt.NewClientOptions(cfg.MQTTBroker, "avs-ingest")

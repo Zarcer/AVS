@@ -13,10 +13,11 @@ import (
 
 type Handler struct {
     db *storage.PostgresDB
+    redis *storage.RedisClient
 }
 
-func NewHandler(db *storage.PostgresDB) *Handler {
-    return &Handler{db: db}
+func NewHandler(db *storage.PostgresDB, redis *storage.RedisClient) *Handler {
+    return &Handler{db: db, redis: redis}
 }
 
 // HandleMessage - обработчик всех MQTT сообщений
@@ -67,6 +68,36 @@ func (h *Handler) handleSensorData(payload []byte) {
     if err := h.db.CreateSensorData(&sensorData); err != nil {
         log.Printf("Error saving sensor data to PostgreSQL: %v", err)
         return
+    }
+
+    // Обновляем "текущее состояние" в Redis (если подключен)
+    if h.redis != nil {
+        type redisRecord struct {
+            ID           uint      `json:"id"`
+            SensorID     string    `json:"sensorId"`
+            BuildingName string    `json:"buildingName"`
+            RoomNumber   string    `json:"roomNumber"`
+            TS           time.Time `json:"ts"`
+            CO2          int       `json:"co2"`
+            Temperature  int       `json:"temperature"`
+            Humidity     int       `json:"humidity"`
+        }
+        rec := redisRecord{
+            ID:           sensorData.ID,
+            SensorID:     sensorData.SensorID,
+            BuildingName: sensorData.BuildingName,
+            RoomNumber:   sensorData.RoomNumber,
+            TS:           sensorData.TS,
+            CO2:          sensorData.CO2,
+            Temperature:  sensorData.Temperature,
+            Humidity:     sensorData.Humidity,
+        }
+        b, err := json.Marshal(rec)
+        if err != nil {
+            log.Printf("Error marshaling Redis current record: %v", err)
+        } else if err := h.redis.SetCurrentSensorRecord(sensorData.SensorID, b); err != nil {
+            log.Printf("Error writing Redis current record: %v", err)
+        }
     }
     
     log.Printf("MQTT: %s/%s (english) -> DB: %s/%s (russian)", 

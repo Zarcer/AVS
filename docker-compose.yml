@@ -16,6 +16,11 @@ services:
       - ./passwd:/mosquitto/config/passwd
     restart: unless-stopped
 
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "no"]
+    restart: unless-stopped
+
   device-go:
     build: ./device-go
     environment:
@@ -33,7 +38,7 @@ services:
       MQTT_USERNAME: "avs"
       MQTT_PASSWORD: "avs"
       POSTGRES_URL: postgres://avs:avs_pass@postgres:5432/avsdb?sslmode=disable
-      REDIS_URL: ""
+      REDIS_URL: redis://redis:6379
       LOG_LEVEL: info
     restart: unless-stopped
 
@@ -43,6 +48,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/avsdb
       SPRING_DATASOURCE_USERNAME: avs
       SPRING_DATASOURCE_PASSWORD: avs_pass
+      SPRING_REDIS_URL: redis://redis:6379
       DEVICE_GO_BASE_URL: http://device-go:8083
       JWT_SECRET: testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttest
     restart: unless-stopped
@@ -80,7 +86,7 @@ services:
     ports:
       - 9234:9234
     environment:
-      - MQTT_ENDPOINT=tcp://mqtt:1883
+      - BROKER_ENDPOINT=tcp://mqtt:1883
       - MQTT_USER=avs
       - MQTT_PASS=avs
     restart: unless-stopped

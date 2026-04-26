@@ -13,6 +13,8 @@ type RedisClient struct {
     Ctx    context.Context
 }
 
+const SensorsCurrentKey = "avs:sensors:current"
+
 func NewRedisClient(redisURL string) *RedisClient {
     opts, err := redis.ParseURL(redisURL)
     if err != nil {
@@ -53,4 +55,14 @@ func (r *RedisClient) GetDeviceData(deviceID string) (string, error) {
 func (r *RedisClient) SetDeviceStatus(deviceID string, status string) error {
     key := "status:" + deviceID
     return r.Client.Set(r.Ctx, key, status, time.Hour).Err()
+}
+
+// SetCurrentSensorRecord stores latest record JSON for a sensor_id.
+// Hash field is sensorID, value is JSON string.
+func (r *RedisClient) SetCurrentSensorRecord(sensorID string, recordJSON []byte) error {
+    return r.Client.HSet(r.Ctx, SensorsCurrentKey, sensorID, recordJSON).Err()
+}
+
+func (r *RedisClient) GetAllCurrentSensorRecords() (map[string]string, error) {
+    return r.Client.HGetAll(r.Ctx, SensorsCurrentKey).Result()
 }

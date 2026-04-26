@@ -69,6 +69,16 @@ func (p *PostgresDB) GetDataInTimeRange(sensorID string, from, to time.Time) ([]
     return data, err
 }
 
+func (p *PostgresDB) GetCurrentState() ([]models.SensorData, error) {
+    var data []models.SensorData
+    err := p.db.Raw(`
+        SELECT DISTINCT ON (sensor_id) *
+        FROM sensors
+        ORDER BY sensor_id, ts DESC
+    `).Scan(&data).Error
+    return data, err
+}
+
 func (p *PostgresDB) Close() error {
     sqlDB, err := p.db.DB()
     if err != nil {

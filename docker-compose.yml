@@ -66,8 +66,6 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-    ports:
-      - 9090:9090
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/etc/prometheus
@@ -77,14 +75,10 @@ services:
     image: nginx/nginx-prometheus-exporter:latest
     command:
       - -nginx.scrape-uri=http://frontend:8081
-    ports:
-      - 9113:9113
     restart: unless-stopped
 
   mqtt-exporter:
     image: sapcc/mosquitto-exporter:latest
-    ports:
-      - 9234:9234
     environment:
       - BROKER_ENDPOINT=tcp://mqtt:1883
       - MQTT_USER=avs
@@ -93,10 +87,12 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    ports:
-      - 3000:3000
     volumes:
       - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SERVER_DOMAIN=nsu-metrics.ru
+      - GF_SERVER_ROOT_URL=https://nsu-metrics.ru/dashboard/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     restart: unless-stopped
 
   node-exporter:
@@ -109,7 +105,13 @@ services:
       - '--path.rootfs=/host'
       - '--web.listen-address=172.17.0.1:9100'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
-    restart: unless-stopped        
+    restart: unless-stopped
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    environment:
+      - REDIS_ADDR=redis://redis:6379
+    restart: unless-stopped            
 
 
 volumes:

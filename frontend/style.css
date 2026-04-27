@@ -1482,3 +1482,66 @@ body {
 .command-btn.ota-rollback:hover {
     background: #ea580c;
 }
+/* ===== КНОПКИ В КАРТОЧКАХ ===== */
+.card-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    justify-content: center;
+    align-items: flex-start;   /* выравниваем по верхнему краю */
+    margin-top: 12px;
+}
+
+/* Сброс стандартных стилей кнопок */
+.card-actions .action-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    margin: 0;
+    padding: 0 12px;
+    width: 180px;
+    height: 34px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    box-sizing: border-box;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    transition: all 0.2s;
+    vertical-align: middle;
+}
+
+/* Иконки внутри кнопок */
+.card-actions .action-btn i {
+    font-size: 13px;
+    line-height: 1;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+/* Цвета кнопок */
+.card-actions .details-btn {
+    background-color: #3b82f6;
+    color: white;
+}
+.card-actions .details-btn:hover {
+    background-color: #2563eb;
+}
+.card-actions .device-btn {
+    background-color: #8b5cf6;
+    color: white;
+}
+.card-actions .device-btn:hover {
+    background-color: #7c3aed;
+}
+
+/* Если только одна кнопка */
+.card-actions.single-button .action-btn {
+    width: 180px;
+}

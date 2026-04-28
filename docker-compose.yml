@@ -2,9 +2,9 @@ services:
   postgres:
     image: postgres:15
     environment:
-      POSTGRES_USER: avs
-      POSTGRES_PASSWORD: avs_pass
-      POSTGRES_DB: avsdb
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./sql:/docker-entrypoint-initdb.d
@@ -26,8 +26,8 @@ services:
     environment:
       HTTP_PORT: 8083
       MQTT_BROKER: tcp://mqtt:1883
-      MQTT_USERNAME: "avs"
-      MQTT_PASSWORD: "avs"
+      MQTT_USERNAME: ${MQTT_USERNAME}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
       LOG_LEVEL: info
     restart: unless-stopped
 
@@ -35,9 +35,9 @@ services:
     build: ./ingest-go
     environment:
       MQTT_BROKER: tcp://mqtt:1883
-      MQTT_USERNAME: "avs"
-      MQTT_PASSWORD: "avs"
-      POSTGRES_URL: postgres://avs:avs_pass@postgres:5432/avsdb?sslmode=disable
+      MQTT_USERNAME: ${MQTT_USERNAME}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+      POSTGRES_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       REDIS_URL: redis://redis:6379
       LOG_LEVEL: info
     restart: unless-stopped
@@ -45,12 +45,12 @@ services:
   api-java: 
     build: ./api-java
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/avsdb
-      SPRING_DATASOURCE_USERNAME: avs
-      SPRING_DATASOURCE_PASSWORD: avs_pass
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       SPRING_REDIS_URL: redis://redis:6379
       DEVICE_GO_BASE_URL: http://device-go:8083
-      JWT_SECRET: testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttest
+      JWT_SECRET: ${JWT_SECRET}
     restart: unless-stopped
 
   frontend:
@@ -81,8 +81,8 @@ services:
     image: sapcc/mosquitto-exporter:latest
     environment:
       - BROKER_ENDPOINT=tcp://mqtt:1883
-      - MQTT_USER=avs
-      - MQTT_PASS=avs
+      - MQTT_USER=${MQTT_USERNAME}
+      - MQTT_PASS=${MQTT_PASSWORD}
     restart: unless-stopped
 
   grafana:
@@ -91,6 +91,14 @@ services:
       - grafana_data:/var/lib/grafana
     environment:
       - GF_SERVER_ROOT_URL=https://nsu-metrics.ru/dashboard/
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=smtp.gmail.com:587
+      - GF_SMTP_USER=${GRAFANA_SMTP_USER}
+      - GF_SMTP_PASSWORD=${GRAFANA_SMTP_PASSWORD}
+      - GF_SMTP_FROM_ADDRESS=${GRAFANA_SMTP_FROM_ADDRESS}
+      - GF_SMTP_FROM_NAME=AVS Grafana
+      - GF_SMTP_SKIP_VERIFY=false
+      - GF_SMTP_STARTTLS_POLICY=MandatoryStartTLS
     restart: unless-stopped
 
   node-exporter:
@@ -114,7 +122,7 @@ services:
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:latest
     environment:
-      - DATA_SOURCE_NAME=postgresql://avs:avs_pass@postgres:5432/avsdb?sslmode=disable
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
     restart: unless-stopped             
 
 volumes:

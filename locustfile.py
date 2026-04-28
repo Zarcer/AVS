@@ -1,298 +1,189 @@
-from __future__ import annotations
-
 import json
+import os
 import random
-import socket
 import ssl
-import threading
 import time
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from itertools import cycle
 
 import paho.mqtt.client as mqtt
-from locust import User, events, task
+from locust import HttpUser, User, between, task
+
+if os.path.exists(".env"):
+    with open(".env", "r", encoding="utf-8") as f:
+        for line in f:
+            if "=" in line and not line.lstrip().startswith("#"):
+                key, value = line.strip().split("=", 1)
+                os.environ.setdefault(key, value)
 
 MQTT_HOST = "nsu-metrics.ru"
 MQTT_PORT = 8883
-MQTT_USERNAME = "avs"
-MQTT_PASSWORD = "avs"
-MQTT_QOS = 1
+MQTT_USER = os.environ["MQTT_USERNAME"]
+MQTT_PASS = os.environ["MQTT_PASSWORD"]
 MQTT_KEEPALIVE = 180
-MQTT_CONNECT_TIMEOUT_SEC = 15
-MQTT_PUBLISH_TIMEOUT_SEC = 10
-MQTT_CLIENT_PREFIX = "avs-locust"
-
-TLS_INSECURE = False
-CO2_RANGE = (450, 1800)
-TEMPERATURE_RANGE = (17, 30)
-HUMIDITY_RANGE = (25, 75)
-BASE_INTERVAL_MIN_SEC = 55.0
-BASE_INTERVAL_MAX_SEC = 65.0
-INTERVAL_JITTER_SEC = 7.0
-STARTUP_CONNECT_SPREAD_SEC = 60.0
-CONNECT_RETRY_BASE_SEC = 1.5
-CONNECT_RETRY_MAX_SEC = 15.0
-CONNECT_RETRY_JITTER_SEC = 0.8
-
-EXPECTED_SENSORS = 940
-
+MQTT_TIMEOUT = 10
+MQTT_QOS = 1
+MQTT_USERS_FIXED = 940
+HTTP_HOST = "https://nsu-metrics.ru"
+HTTP_TIMEOUT = 120
 
 @dataclass(frozen=True)
 class Sensor:
-    sensor_id: str
+    id: str
     index: int
-    room_number: str
-    building_name: str
+    room: str
+    building: str
 
-
-def _mapping_path() -> Path:
-    return Path("ingest-go/mapping_eng.txt")
-
-
-def _load_sensors() -> list[Sensor]:
-    sensors: list[Sensor] = []
-    path = _mapping_path()
-    with path.open("r", encoding="utf-8") as mapping_file:
-        for lineno, raw_line in enumerate(mapping_file, start=1):
-            line = raw_line.strip()
-            if not line:
-                continue
-
-            parts = line.split("|")
-            if len(parts) != 3:
-                raise ValueError(
-                    f"{path}:{lineno} expected sensor_<n>|room|building, got: {line!r}"
-                )
-
-            sensor_id, room_number, building_name = (p.strip() for p in parts)
-            if not sensor_id.startswith("sensor_"):
-                raise ValueError(f"{path}:{lineno} invalid sensor id: {sensor_id!r}")
-
-            try:
-                index = int(sensor_id.split("_", 1)[1])
-            except (ValueError, IndexError) as exc:
-                raise ValueError(f"{path}:{lineno} invalid sensor index in {sensor_id!r}") from exc
-
-            sensors.append(
-                Sensor(
-                    sensor_id=sensor_id,
-                    index=index,
-                    room_number=room_number,
-                    building_name=building_name,
-                )
-            )
-
-    if len(sensors) != EXPECTED_SENSORS:
-        raise ValueError(f"{path} has {len(sensors)} sensors, expected {EXPECTED_SENSORS}")
-
+def load_sensors() -> list[Sensor]:
+    sensors = []
+    with open("ingest-go/mapping_eng.txt", "r", encoding="utf-8") as f:
+        for line in filter(str.strip, f):
+            s_id, room, bld = (p.strip() for p in line.split("|"))
+            sensors.append(Sensor(s_id, int(s_id.split("_")[1]), room, bld))
     return sensors
 
+SENSORS = load_sensors()
+SENSOR_CYCLE = cycle(SENSORS)
 
-SENSORS = _load_sensors()
-SENSOR_ASSIGN_LOCK = threading.Lock()
-NEXT_SENSOR_INDEX = 0
+STATIC_ASSETS = [
+    "/style.css",
+    "/js/imdf-parser.js",
+    "/js/sensor-api.js",
+    "/js/campus-map.js",
+    "/js/charts.js",
+    "/js/app.js",
+    "/imdf-data/address.geojson",
+    "/imdf-data/building.geojson",
+    "/imdf-data/footprint.geojson",
+    "/imdf-data/level.geojson",
+    "/imdf-data/opening.geojson",
+    "/imdf-data/venue.geojson",
+    "/imdf-data/manifest.json",
+]
 
 
-def _assign_sensor() -> Sensor:
-    global NEXT_SENSOR_INDEX
-    with SENSOR_ASSIGN_LOCK:
-        sensor = SENSORS[NEXT_SENSOR_INDEX % len(SENSORS)]
-        NEXT_SENSOR_INDEX += 1
-        return sensor
+class MqttSensorUser(User):
+    fixed_count = MQTT_USERS_FIXED
+    wait_time = between(0.5, 1.5)
 
-
-class MqttSensorClient:
-    def __init__(self, environment, sensor: Sensor) -> None:
-        self.environment = environment
-        self.sensor = sensor
-        self._connected = threading.Event()
-        self._connect_rc: Optional[int] = None
+    def __init__(self, environment):
+        super().__init__(environment)
+        self.sensor = next(SENSOR_CYCLE)
         self.is_connected = False
+        self.next_publish_at = 0.0
 
-        client_id = f"{MQTT_CLIENT_PREFIX}-{sensor.sensor_id}-{uuid.uuid4().hex[:6]}"
+        client_id = f"avs-locust-{self.sensor.id}-{uuid.uuid4().hex[:6]}"
+    
         try:
-            self._client = mqtt.Client(
-                callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
-                client_id=client_id,
-                clean_session=True,
-            )
+            self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=client_id)
         except AttributeError:
-            self._client = mqtt.Client(client_id=client_id, clean_session=True)
+            self.mqtt_client = mqtt.Client(client_id=client_id)
 
-        self._client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+        self.mqtt_client.username_pw_set(MQTT_USER, MQTT_PASS)
+        
+        ctx = ssl.create_default_context()
+        ctx.check_hostname, ctx.verify_mode = False, ssl.CERT_NONE
+        self.mqtt_client.tls_set_context(ctx)
+        self.mqtt_client.reconnect_delay_set(1.5, 15.0)
+        self.mqtt_client.on_connect = lambda c, u, f, rc, *_: setattr(self, "is_connected", getattr(rc, "value", rc) == 0)
+        self.mqtt_client.on_disconnect = lambda c, u, *_: setattr(self, "is_connected", False)
 
-        tls_context = ssl.create_default_context()
-        if TLS_INSECURE:
-            tls_context.check_hostname = False
-            tls_context.verify_mode = ssl.CERT_NONE
-        self._client.tls_set_context(tls_context)
-
-        self._client.on_connect = self._on_connect
-        self._client.on_disconnect = self._on_disconnect
-
-    def connect(self) -> None:
-        started = time.perf_counter()
-        self._connected.clear()
-        self._connect_rc = None
-        self.is_connected = False
+    def on_start(self):
+        time.sleep(random.uniform(0.0, 60.0))
+        start_ts = time.perf_counter()
         try:
-            self._client.connect(MQTT_HOST, MQTT_PORT, keepalive=MQTT_KEEPALIVE)
-        except (OSError, socket.error) as exc:
-            self._fire_request("connect", started, 0, exc)
-            return
+            self.mqtt_client.connect(MQTT_HOST, MQTT_PORT, MQTT_KEEPALIVE)
+            self.mqtt_client.loop_start()
+            self._log_event("CONNECT", start_ts)
+            self.next_publish_at = time.time() + random.uniform(0.0, 5.0)
+        except Exception as e:
+            self._log_event("CONNECT", start_ts, exc=e)
 
-        self._client.loop_start()
+    def on_stop(self):
+        self.mqtt_client.loop_stop()
+        self.mqtt_client.disconnect()
 
-        if not self._connected.wait(MQTT_CONNECT_TIMEOUT_SEC):
-            exc = TimeoutError(
-                f"connect timeout after {MQTT_CONNECT_TIMEOUT_SEC}s for {self.sensor.sensor_id}"
-            )
-            self._fire_request("connect", started, 0, exc)
-            self.disconnect()
-            return
+    @task
+    def publish_loop(self):
+        now = time.time()
+        if now >= self.next_publish_at:
+            self.publish_data()
+            self.next_publish_at = now + random.uniform(48.0, 72.0)
 
-        if self._connect_rc not in (0, mqtt.MQTT_ERR_SUCCESS):
-            exc = ConnectionError(f"connect failed rc={self._connect_rc}")
-            self._fire_request("connect", started, 0, exc)
-            self.disconnect()
-            return
-
-        self.is_connected = True
-        self._fire_request("connect", started, 0, None)
-
-    def disconnect(self) -> None:
-        try:
-            self._client.loop_stop()
-        finally:
-            try:
-                self._client.disconnect()
-            except Exception:
-                pass
-        self.is_connected = False
-        self._connected.clear()
-
-    def publish_data(self) -> None:
+    def publish_data(self):
         if not self.is_connected:
             return
 
         topic = f"sensors/{self.sensor.index}/data"
-        payload = {
-            "sensorId": self.sensor.sensor_id,
-            "buildingName": self.sensor.building_name,
-            "roomNumber": self.sensor.room_number,
+        payload = json.dumps({
+            "sensorId": self.sensor.id,
+            "buildingName": self.sensor.building,
+            "roomNumber": self.sensor.room,
             "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "co2": random.randint(*CO2_RANGE),
-            "temperature": random.randint(*TEMPERATURE_RANGE),
-            "humidity": random.randint(*HUMIDITY_RANGE),
-        }
-        payload_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+            "co2": random.randint(450, 1800),
+            "temperature": random.randint(17, 30),
+            "humidity": random.randint(25, 75),
+        }, separators=(",", ":")).encode("utf-8")
 
-        started = time.perf_counter()
+        start_ts = time.perf_counter()
         try:
-            info = self._client.publish(topic, payload_bytes, qos=MQTT_QOS)
-        except Exception as exc:
-            self.is_connected = False
-            self._fire_request("publish", started, len(payload_bytes), exc, name=topic)
-            return
+            msg = self.mqtt_client.publish(topic, payload, qos=MQTT_QOS)
+            msg.wait_for_publish(timeout=MQTT_TIMEOUT)
+            
+            exc = None if msg.is_published() else TimeoutError("PUBACK timeout")
+            self._log_event("PUBLISH", start_ts, len(payload), exc, topic)
+        except Exception as e:
+            self._log_event("PUBLISH", start_ts, len(payload), e, topic)
 
-        if info.rc != mqtt.MQTT_ERR_SUCCESS:
-            exc = RuntimeError(f"publish failed rc={info.rc}")
-            self.is_connected = False
-            self._fire_request("publish", started, len(payload_bytes), exc, name=topic)
-            return
-
-        try:
-            info.wait_for_publish(timeout=MQTT_PUBLISH_TIMEOUT_SEC)
-        except Exception as exc:
-            self._fire_request("publish", started, len(payload_bytes), exc, name=topic)
-            return
-
-        if not info.is_published():
-            exc = TimeoutError(f"PUBACK timeout after {MQTT_PUBLISH_TIMEOUT_SEC}s")
-            self._fire_request("publish", started, len(payload_bytes), exc, name=topic)
-            return
-
-        self._fire_request("publish", started, len(payload_bytes), None, name=topic)
-
-    def _on_connect(self, client, userdata, flags, reason_code, properties=None):
-        self._connect_rc = getattr(reason_code, "value", reason_code)
-        self._connected.set()
-
-    def _on_disconnect(self, client, userdata, *args, **kwargs):
-        self._connected.clear()
-        self.is_connected = False
-
-    def _fire_request(
-        self,
-        kind: str,
-        start: float,
-        response_length: int,
-        exception: Optional[BaseException],
-        name: Optional[str] = None,
-    ) -> None:
-        elapsed_ms = (time.perf_counter() - start) * 1000
+    def _log_event(self, kind: str, start_ts: float, length: int = 0, exc: Exception = None, name: str = None):
         self.environment.events.request.fire(
-            request_type=f"MQTT-{kind.upper()}",
+            request_type=f"MQTT-{kind}",
             name=name or kind,
-            response_time=elapsed_ms,
-            response_length=response_length,
-            exception=exception,
-            context={"sensor_id": self.sensor.sensor_id},
+            response_time=(time.perf_counter() - start_ts) * 1000,
+            response_length=length,
+            exception=exc,
+            context={"sensor_id": self.sensor.id},
         )
 
 
-class SensorUser(User):
-    def wait_time(self) -> float:
-        jitter = random.uniform(-INTERVAL_JITTER_SEC, INTERVAL_JITTER_SEC)
-        return max(0.1, self.base_interval_sec + jitter)
+class WebHttpUser(HttpUser):
+    weight = 1
+    host = HTTP_HOST
+    wait_time = between(0.7, 2.0)
 
-    def __init__(self, environment):
-        super().__init__(environment)
-        self.sensor = _assign_sensor()
-        self.base_interval_sec = random.uniform(BASE_INTERVAL_MIN_SEC, BASE_INTERVAL_MAX_SEC)
-        self.mqtt_client = MqttSensorClient(environment, self.sensor)
-        self._next_reconnect_at = 0.0
-        self._reconnect_failures = 0
-
-    def _schedule_next_reconnect(self, attempt: int = 0) -> None:
-        delay = min(
-            CONNECT_RETRY_MAX_SEC,
-            CONNECT_RETRY_BASE_SEC * (2 ** max(0, attempt)),
-        ) + random.uniform(0.0, CONNECT_RETRY_JITTER_SEC)
-        self._next_reconnect_at = time.monotonic() + delay
-
-    def on_start(self) -> None:
-        time.sleep(random.uniform(0.0, STARTUP_CONNECT_SPREAD_SEC))
-        self.mqtt_client.connect()
-        if not self.mqtt_client.is_connected:
-            self._reconnect_failures = 1
-            self._schedule_next_reconnect(attempt=self._reconnect_failures)
-        else:
-            self._reconnect_failures = 0
-
-    def on_stop(self) -> None:
-        self.mqtt_client.disconnect()
+    def on_start(self):
+        self.client.verify = False
 
     @task
-    def publish_sensor_data(self) -> None:
-        if not self.mqtt_client.is_connected:
-            if time.monotonic() >= self._next_reconnect_at:
-                self.mqtt_client.connect()
-                if not self.mqtt_client.is_connected:
-                    self._reconnect_failures += 1
-                    self._schedule_next_reconnect(attempt=self._reconnect_failures)
-                else:
-                    self._reconnect_failures = 0
-            return
-        self.mqtt_client.publish_data()
+    def mixed_web_load(self):
+        roll = random.random()
+        if roll < 0.25:
+            self.fetch_frontend_bundle()
+        elif roll < 0.80:
+            self.fetch_current_data()
+        else:
+            self.fetch_sensor_history()
 
+    def fetch_frontend_bundle(self):
+        self.client.get("/", name="GET /", timeout=HTTP_TIMEOUT)
+        for path in STATIC_ASSETS:
+            self.client.get(path, name="GET static", timeout=HTTP_TIMEOUT)
 
-@events.init.add_listener
-def _on_init(environment, **_kwargs):
-    if len(SENSORS) != EXPECTED_SENSORS:
-        raise RuntimeError(
-            f"Need exactly {EXPECTED_SENSORS} sensors, got {len(SENSORS)} from mapping_eng.txt"
+    def fetch_current_data(self):
+        self.client.get("/api/sensors/current", name="GET /api/sensors/current", timeout=HTTP_TIMEOUT)
+
+    def fetch_sensor_history(self):
+        sensor = random.choice(SENSORS).id
+        to_ts = datetime.now(timezone.utc)
+        from_ts = to_ts - timedelta(hours=24)
+        self.client.get(
+            f"/api/sensors/{sensor}/history",
+            params={
+                "from": from_ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "to": to_ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+            name="GET /api/sensors/:sensor/history",
+            timeout=HTTP_TIMEOUT,
         )

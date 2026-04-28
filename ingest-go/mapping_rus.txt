@@ -1,24 +1,3 @@
-## Отправка в топик
-
-mosquitto_pub -h nsu-metrics.ru -u "avs" -P "avs" --capath /etc/ssl/certs/ -t "sensors/75/data" -m '{
-    "sensorId": "sensor_75",
-    "buildingName": "Main",
-    "roomNumber": "123",
-    "ts": "2027-04-15T01:00:00Z",
-    "co2": 20,
-    "temperature": 120,
-    "humidity": 50
-  }'
-
-## Mapping
-
-"Auditory":               "Аудиторный корпус",
-"Main":                   "Главный корпус",
-"Educational_Laboratory": "Учебно-лабораторный корпус",
-"Educational_1":          "Учебный корпус №1",
-"Rectorate":              "Ректорат",
-
-### sensor id | room_number
 sensor_1|100а|Аудиторный корпус
 sensor_2|100б|Аудиторный корпус
 sensor_3|101а|Аудиторный корпус

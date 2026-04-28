@@ -26,16 +26,12 @@ func Run(cfg *config.Config) error {
     defer db.Close()
     log.Println("PostgreSQL connection established")
 
-<<<<<<< HEAD:ingest-go/main.go
-    // Инициализируем Redis (опционально)
-=======
     // Опционально Redis (если URL задан)
->>>>>>> origin/main:ingest-go/internal/app/app.go
     var redisClient *storage.RedisClient
     if cfg.RedisURL != "" {
         redisClient = storage.NewRedisClient(cfg.RedisURL)
         defer redisClient.Close()
-<<<<<<< HEAD:ingest-go/main.go
+        log.Println("Redis connection established")
 
         // Backfill Redis "current state" from PostgreSQL on startup
         current, err := db.GetCurrentState()
@@ -77,18 +73,9 @@ func Run(cfg *config.Config) error {
             log.Printf("Redis backfill complete: %d sensor current records", ok)
         }
     }
-    
-    // Инициализируем MQTT обработчик
-    handler := mqtt.NewHandler(db, redisClient)
-    
-    // Настраиваем MQTT клиент
-=======
-        log.Println("Redis connection established")
-    }
 
     // MQTT
-    handler := mqtt.NewHandler(db, redisClient) // можно передать redis для кэширования
->>>>>>> origin/main:ingest-go/internal/app/app.go
+    handler := mqtt.NewHandler(db, redisClient)
     mqttOpts := mqtt.NewClientOptions(cfg.MQTTBroker, "avs-ingest")
     if cfg.MQTTUsername != "" {
         mqttOpts.SetUsername(cfg.MQTTUsername)

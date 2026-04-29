@@ -196,6 +196,19 @@ class SensorAPIService {
             throw error;
         }
     }
+
+    async getSensorHistoryAggregated(sensorId, from, to, intervalSeconds = 3600) {
+        if (this.useDemoMode) {
+            return this.generateDemoHistoryData(24); // или генерировать агрегированные демо-данные
+        }
+        const url = `${this.baseUrl}/sensors/${sensorId}/history/aggregated?from=${from.toISOString()}&to=${to.toISOString()}&intervalSeconds=${intervalSeconds}`;
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!response.ok) throw new Error(`Ошибка сервера: ${response.status}`);
+        return await response.json();
+    }    
     
     async registerDevice(buildingName, roomNumber) {
         return this.sendDeviceCommand("dynamic", "register", {
@@ -239,8 +252,6 @@ class SensorAPIService {
                 return [];
             }
 
-            // Опционально: можно провести валидацию полей или преобразование,
-            // но предполагаем, что сервер возвращает данные в нужном формате
             return data;
 
         } catch (error) {

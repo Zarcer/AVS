@@ -1,5 +1,6 @@
 package com.avs.api_java.controller;
 
+import com.avs.api_java.dto.AggregatedRecordDto;
 import com.avs.api_java.entity.RecordEntity;
 import com.avs.api_java.service.ApiService;
 import org.springframework.http.HttpStatus;
@@ -31,5 +32,14 @@ public class ApiController {
     @GetMapping("/{sensorId}/history")
     public List<RecordEntity> getHistory(@PathVariable String sensorId, @RequestParam Instant from, @RequestParam Instant to) {
         return service.getSensorHistory(sensorId, from, to);
+    }
+
+   @GetMapping("/{sensorId}/history/aggregated")
+    public List<AggregatedRecordDto> getHistoryAggregated(
+            @PathVariable String sensorId,
+            @RequestParam Instant from,
+            @RequestParam Instant to,
+            @RequestParam(defaultValue = "3600") long intervalSeconds) {
+        return service.getSensorHistoryAggregated(sensorId, from, to, intervalSeconds);
     }
 }

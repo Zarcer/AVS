@@ -25,4 +25,23 @@ public interface ApiRepository extends JpaRepository<RecordEntity, Long> {
         ORDER BY ts ASC
         """, nativeQuery = true)
     List<RecordEntity> getHistory(@Param("sensorId") String sensorId, @Param("from") Instant from, @Param("to") Instant to);
+
+        @Query(value = """
+        SELECT
+            to_timestamp(floor(extract(epoch from ts) / :intervalSeconds) * :intervalSeconds) AS bucket,
+            AVG(co2) AS co2,
+            AVG(temperature) AS temperature,
+            AVG(humidity) AS humidity
+        FROM sensors
+        WHERE sensor_id = :sensorId
+          AND ts >= :from
+          AND ts <= :to
+        GROUP BY bucket
+        ORDER BY bucket ASC
+        """, nativeQuery = true)
+    List<Object[]> getHistoryAggregated(
+            @Param("sensorId") String sensorId,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("intervalSeconds") long intervalSeconds);
 }

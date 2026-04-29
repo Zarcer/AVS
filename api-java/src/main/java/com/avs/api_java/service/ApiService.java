@@ -1,6 +1,5 @@
 package com.avs.api_java.service;
 
-import com.avs.api_java.dto.AggregatedRecordDto;
 import com.avs.api_java.entity.RecordEntity;
 import com.avs.api_java.jpa_repository.ApiRepository;
 import com.avs.api_java.redis.CurrentStateRedisService;
@@ -32,19 +31,15 @@ public class ApiService {
         return repo.getCurrent();
     }
 
-    public List<RecordEntity> getSensorHistory(String sensorId, Instant from, Instant to) {
-        return repo.getHistory(sensorId, from, to);
-    }
-
-    public List<AggregatedRecordDto> getSensorHistoryAggregated(String sensorId, Instant from, Instant to, long intervalSeconds) {
-        List<Object[]> rows = repo.getHistoryAggregated(sensorId, from, to, intervalSeconds);
-        return rows.stream().map(row -> {
-            AggregatedRecordDto dto = new AggregatedRecordDto();
-            dto.setTs((Instant) row[0]);
-            dto.setCo2(((Number) row[1]).doubleValue());  
-            dto.setTemperature(((Number) row[2]).doubleValue()); 
-            dto.setHumidity(((Number) row[3]).doubleValue());    
-            return dto;
+    public List<RecordEntity> getSensorHistoryAggregated(String sensorId, Instant from, Instant to, long intervalSeconds) {
+        return repo.getHistoryAggregated(sensorId, from, to, intervalSeconds).stream().map(row -> {
+            RecordEntity record = new RecordEntity();
+            record.setSensorId(sensorId);
+            record.setTs((Instant) row[0]);
+            record.setCo2(((Number) row[1]).intValue());
+            record.setTemperature(((Number) row[2]).intValue());
+            record.setHumidity(((Number) row[3]).intValue());
+            return record;
         }).collect(Collectors.toList());
     }
 }

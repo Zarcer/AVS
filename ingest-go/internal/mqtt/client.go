@@ -20,30 +20,32 @@ func NewClient(opts *mqtt.ClientOptions, handler *Handler) *Client {
 }
 
 func NewClientOptions(broker, clientID string) *mqtt.ClientOptions {
-    opts := mqtt.NewClientOptions()
-    opts.AddBroker(broker)
-    fullClientID := clientID + "-" + time.Now().Format("20060102150405")
-    opts.SetClientID(fullClientID)
-    opts.SetCleanSession(true)
-    opts.SetAutoReconnect(true)
-    opts.SetMaxReconnectInterval(10 * time.Second)
-    
-    log.Printf("MQTT ClientID: %s", fullClientID)
+	opts := mqtt.NewClientOptions()
+	opts.AddBroker(broker)
+	fullClientID := clientID + "-" + time.Now().Format("20060102150405")
+	opts.SetClientID(fullClientID)
+	opts.SetCleanSession(true)
+	opts.SetAutoReconnect(true)
+	opts.SetMaxReconnectInterval(10 * time.Second)
+	opts.SetOrderMatters(false)
+	opts.SetMessageChannelDepth(10000)
 
-    // Callback-и
-    opts.OnConnect = func(c mqtt.Client) {
-        log.Println("Connected to MQTT broker")
-    }
-    
-    opts.OnConnectionLost = func(c mqtt.Client, err error) {
-        log.Printf("MQTT connection lost: %v", err)
-    }
-    
-    opts.OnReconnecting = func(c mqtt.Client, co *mqtt.ClientOptions) {
-        log.Println("Reconnecting to MQTT broker...")
-    }
-    
-    return opts
+	log.Printf("MQTT ClientID: %s", fullClientID)
+
+	// Callback-и
+	opts.OnConnect = func(c mqtt.Client) {
+		log.Println("Connected to MQTT broker")
+	}
+
+	opts.OnConnectionLost = func(c mqtt.Client, err error) {
+		log.Printf("MQTT connection lost: %v", err)
+	}
+
+	opts.OnReconnecting = func(c mqtt.Client, co *mqtt.ClientOptions) {
+		log.Println("Reconnecting to MQTT broker...")
+	}
+
+	return opts
 }
 
 func (c *Client) Connect() error {

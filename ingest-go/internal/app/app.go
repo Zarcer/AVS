@@ -76,6 +76,7 @@ func Run(cfg *config.Config) error {
 
     // MQTT
     handler := mqtt.NewHandler(db, redisClient)
+	defer handler.Close()
     mqttOpts := mqtt.NewClientOptions(cfg.MQTTBroker, "avs-ingest")
     if cfg.MQTTUsername != "" {
         mqttOpts.SetUsername(cfg.MQTTUsername)

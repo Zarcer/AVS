@@ -1,10 +1,12 @@
 package mqtt
 
 import (
-    "encoding/json"
-    "log"
-    "strings"
-    "time"
+	"encoding/json"
+	"log"
+	"runtime"
+	"strings"
+	"sync"
+	"time"
 
     mqtt "github.com/eclipse/paho.mqtt.golang"
     "ingest-go/internal/models"
@@ -12,12 +14,44 @@ import (
 )
 
 type Handler struct {
-    db    *storage.PostgresDB
-    redis *storage.RedisClient
+	db    *storage.PostgresDB
+	redis *storage.RedisClient
+	jobs  chan []byte
+	wg    sync.WaitGroup
 }
 
+const (
+	workerQueueSize = 10000
+	minWorkers      = 4
+)
+
 func NewHandler(db *storage.PostgresDB, redis *storage.RedisClient) *Handler {
-    return &Handler{db: db, redis: redis}
+	h := &Handler{
+		db:    db,
+		redis: redis,
+		jobs:  make(chan []byte, workerQueueSize),
+	}
+
+	workers := runtime.NumCPU()
+	if workers < minWorkers {
+		workers = minWorkers
+	}
+	for i := 0; i < workers; i++ {
+		h.wg.Add(1)
+		go func() {
+			defer h.wg.Done()
+			for payload := range h.jobs {
+				h.handleSensorData(payload)
+			}
+		}()
+	}
+
+	return h
+}
+
+func (h *Handler) Close() {
+	close(h.jobs)
+	h.wg.Wait()
 }
 
 // redisRecord — формат, который ожидает api-java при чтении HGETALL avs:sensors:current.
@@ -34,17 +68,21 @@ type redisRecord struct {
 }
 
 func (h *Handler) HandleMessage(client mqtt.Client, msg mqtt.Message) {
-    topic := msg.Topic()
-    log.Printf("MQTT message on %s", topic)
+	topic := msg.Topic()
 
-    switch {
-    case strings.HasPrefix(topic, "sensors/") && strings.HasSuffix(topic, "/data"):
-        h.handleSensorData(msg.Payload())
-    case strings.HasPrefix(topic, "sensors/") && strings.HasSuffix(topic, "/status"):
-        h.handleSensorStatus(msg.Payload())
-    case strings.HasPrefix(topic, "commands/"):
-        h.handleCommand(msg.Payload())
-    }
+	switch {
+	case strings.HasPrefix(topic, "sensors/") && strings.HasSuffix(topic, "/data"):
+		payload := append([]byte(nil), msg.Payload()...)
+		select {
+		case h.jobs <- payload:
+		default:
+			log.Printf("Dropping sensor data: worker queue is full (%d)", workerQueueSize)
+		}
+	case strings.HasPrefix(topic, "sensors/") && strings.HasSuffix(topic, "/status"):
+		h.handleSensorStatus(msg.Payload())
+	case strings.HasPrefix(topic, "commands/"):
+		h.handleCommand(msg.Payload())
+	}
 }
 
 func (h *Handler) handleSensorData(payload []byte) {
